@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Intelligence</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg: #0a0e1a;
+  --surface: #111827;
+  --surface2: #1a2235;
+  --border: #1e2d45;
+  --accent: #00d4aa;
+  --accent2: #0ea5e9;
+  --up: #22c55e;
+  --down: #ef4444;
+  --muted: #6b7280;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --arb-open: #0f6e56;
+  --arb-open-bg: #0a2e25;
+  --arb-open-border: #1a5c45;
+  --arb-closed: #a32d2d;
+  --arb-closed-bg: #2a0f0f;
+  --arb-closed-border: #5c1a1a;
+  --arb-marginal: #854f0b;
+  --arb-marginal-bg: #2a1f08;
+  --arb-marginal-border: #5c3a0a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Ticker Bar ── */
+.ticker-wrap { background: #060a14; border-bottom: 1px solid var(--border); height: 32px; overflow: hidden; white-space: nowrap; position: relative; }
+.ticker-inner { display: inline-flex; animation: scroll-ticker 80s linear infinite; }
+.ticker-inner:hover { animation-play-state: paused; }
+.ticker-item { display: inline-block; margin-right: 40px; white-space: nowrap; line-height: 32px; }
+.ticker-item .sym { color: var(--text2); font-size: 11px; }
+.ticker-item .price { color: var(--text); font-weight: 600; margin: 0 4px; }
+.ticker-item .chg.up { color: var(--up); }
+.ticker-item .chg.down { color: var(--down); }
+@keyframes scroll-ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+/* ── Header ── */
+header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 16px; }
+.logo { color: var(--accent); font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+.logo span { color: var(--text2); font-weight: 400; }
+.last-update { margin-left: auto; color: var(--muted); font-size: 11px; }
+.status-dot { width: 7px; height: 7px; background: var(--up); border-radius: 50%; display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* ── Header nav buttons ── */
+.header-nav { display: flex; gap: 6px; margin-left: 24px; }
+.nav-btn { background: none; border: 1px solid var(--border); color: var(--text2); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-family: inherit; transition: .2s; font-weight: 600; letter-spacing: .5px; }
+.nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+.nav-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,212,170,0.08); }
+
+/* ── Main 3-column grid ── */
+.main { display: grid; grid-template-columns: 240px 1fr 320px; flex: 1; overflow: hidden; }
+
+/* ── Left: Market Panel ── */
+.market-panel { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.panel-header { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.panel-title { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.refresh-btn { background: none; border: 1px solid var(--border); color: var(--text2); padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: inherit; transition: .2s; }
+.refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+.market-scroll { flex: 1; overflow-y: auto; padding: 6px 0; }
+.market-scroll::-webkit-scrollbar { width: 4px; }
+.market-scroll::-webkit-scrollbar-track { background: transparent; }
+.market-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.cat-header { padding: 8px 14px 4px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.market-row { display: flex; align-items: center; padding: 5px 14px; cursor: pointer; transition: background .15s; gap: 6px; }
+.market-row:hover { background: var(--surface2); }
+.market-row .name { flex: 1; color: var(--text2); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.market-row .price { color: var(--text); font-weight: 600; font-size: 11px; white-space: nowrap; }
+.market-row .chg { font-size: 10px; white-space: nowrap; }
+.chg.up { color: var(--up); }
+.chg.down { color: var(--down); }
+.chg.flat { color: var(--muted); }
+
+/* ── Center: Chat ── */
+.chat-panel { display: flex; flex-direction: column; overflow: hidden; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.chat-messages::-webkit-scrollbar { width: 4px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.msg { max-width: 92%; display: flex; flex-direction: column; gap: 4px; }
+.msg.user { align-self: flex-end; }
+.msg.bot { align-self: flex-start; }
+.msg .bubble { padding: 10px 14px; border-radius: 12px; line-height: 1.6; white-space: pre-wrap; font-size: 12.5px; }
+.msg.user .bubble { background: #1e3a5f; color: var(--text); border-bottom-right-radius: 3px; }
+.msg.bot .bubble { background: var(--surface2); color: var(--text); border-bottom-left-radius: 3px; }
+.typing-indicator { display: flex; gap: 4px; padding: 10px 14px; background: var(--surface2); border-radius: 12px; border-bottom-left-radius: 3px; width: fit-content; }
+.typing-indicator span { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: bounce 1.2s infinite; }
+.typing-indicator span:nth-child(2) { animation-delay: .2s; }
+.typing-indicator span:nth-child(3) { animation-delay: .4s; }
+@keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 16px; border-top: 1px solid var(--border); }
+.chip { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); padding: 4px 10px; border-radius: 14px; cursor: pointer; font-size: 11px; font-family: inherit; transition: .2s; white-space: nowrap; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.input-bar { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--surface); }
+.chat-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 9px 14px; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; resize: none; max-height: 100px; transition: border .2s; }
+.chat-input:focus { border-color: var(--accent); }
+.send-btn { background: var(--accent); color: #000; border: none; padding: 9px 16px; border-radius: 8px; cursor: pointer; font-weight: 700; font-family: inherit; font-size: 13px; transition: .2s; }
+.send-btn:hover { opacity: .85; }
+.send-btn:disabled { opacity: .4; cursor: not-allowed; }
+.welcome { text-align: center; padding: 40px 20px; color: var(--muted); }
+.welcome h3 { color: var(--accent); margin-bottom: 10px; font-size: 15px; }
+.welcome p { font-size: 11px; line-height: 1.7; }
+
+/* ── Right Panel (News / Arb) ── */
+.right-panel { background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.right-view { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+.right-view.active { display: flex; }
+
+/* ── News ── */
+.news-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.news-tab { flex: 1; padding: 9px 4px; text-align: center; cursor: pointer; font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid transparent; transition: .2s; }
+.news-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.news-tab:hover:not(.active) { color: var(--text2); }
+.news-scroll { flex: 1; overflow-y: auto; padding: 6px 0; }
+.news-scroll::-webkit-scrollbar { width: 4px; }
+.news-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.news-item { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.news-item:last-child { border-bottom: none; }
+.news-item:hover { background: var(--surface2); }
+.news-item a { color: var(--text); text-decoration: none; font-size: 11.5px; line-height: 1.5; display: block; }
+.news-item a:hover { color: var(--accent); }
+.news-time { color: var(--muted); font-size: 9.5px; margin-top: 4px; }
+.news-loading { padding: 20px; text-align: center; color: var(--muted); font-size: 11px; }
+.news-error { padding: 12px; color: var(--down); font-size: 11px; text-align: center; }
+.news-badge { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .5px; padding: 1px 5px; border-radius: 3px; margin-bottom: 4px; text-transform: uppercase; }
+.badge-reuters { background: #ff6200; color: #fff; }
+.badge-bloomberg { background: #1464b4; color: #fff; }
+.badge-argus { background: #2d5a8e; color: #fff; }
+
+/* ── Arb Calculator ── */
+.arb-panel { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.arb-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.arb-tab { flex: 1; padding: 9px 4px; text-align: center; cursor: pointer; font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid transparent; transition: .2s; background: none; border-top: none; border-left: none; border-right: none; font-family: inherit; }
+.arb-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.arb-tab:hover:not(.active) { color: var(--text2); }
+.arb-content { flex: 1; overflow-y: auto; padding: 12px; }
+.arb-content::-webkit-scrollbar { width: 4px; }
+.arb-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.arb-section { display: none; }
+.arb-section.active { display: block; }
+
+.field-group { margin-bottom: 10px; }
+.field-group-title { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; padding: 6px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+.field-row.triple { grid-template-columns: 1fr 1fr 1fr; }
+.field { display: flex; flex-direction: column; gap: 3px; }
+.field label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.field input, .field select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 5px 8px; border-radius: 4px; font-size: 11px; font-family: inherit; width: 100%; outline: none; transition: border .2s; height: 28px; }
+.field input:focus, .field select:focus { border-color: var(--accent); }
+.field .hint { font-size: 9px; color: var(--muted); margin-top: 1px; }
+
+/* Result cards */
+.result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+.rcard { background: var(--surface2); border-radius: 6px; padding: 8px 10px; border: 1px solid var(--border); }
+.rcard .rlabel { font-size: 9px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+.rcard .rval { font-size: 16px; font-weight: 700; }
+.rcard .rsub { font-size: 9px; color: var(--muted); margin-top: 2px; }
+.rval.pos { color: var(--up); }
+.rval.neg { color: var(--down); }
+.rval.neutral { color: var(--text); }
+
+/* Verdict */
+.verdict { border-radius: 6px; padding: 10px 12px; margin: 8px 0; border: 1px solid; }
+.verdict.open { background: var(--arb-open-bg); border-color: var(--arb-open-border); }
+.verdict.closed { background: var(--arb-closed-bg); border-color: var(--arb-closed-border); }
+.verdict.marginal { background: var(--arb-marginal-bg); border-color: var(--arb-marginal-border); }
+.verdict .vtitle { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+.verdict.open .vtitle { color: #22c55e; }
+.verdict.closed .vtitle { color: #ef4444; }
+.verdict.marginal .vtitle { color: #f59e0b; }
+.verdict .vtext { font-size: 10px; color: var(--text2); line-height: 1.5; }
+
+/* Cost stack */
+.cost-stack { background: var(--surface2); border-radius: 6px; border: 1px solid var(--border); padding: 8px 10px; margin: 8px 0; }
+.cost-stack-title { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 6px; }
+.cost-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 10px; border-bottom: 1px solid rgba(30,45,69,0.5); }
+.cost-row:last-child { border-bottom: none; margin-top: 4px; padding-top: 6px; font-weight: 700; font-size: 11px; }
+.cost-row .cn { color: var(--text2); }
+.cost-row .cv { color: var(--text); font-variant-numeric: tabular-nums; }
+.cost-row.total-row .cn { color: var(--text); }
+.cost-row.pos-row .cv { color: var(--up); }
+.cost-row.neg-row .cv { color: var(--down); }
+
+/* Chart */
+.chart-box { margin: 8px 0; position: relative; height: 160px; }
+
+/* Guide */
+.guide-block { background: var(--surface2); border-radius: 6px; border: 1px solid var(--border); padding: 10px 12px; margin-bottom: 8px; }
+.guide-block h4 { color: var(--accent); font-size: 10px; letter-spacing: .8px; text-transform: uppercase; margin-bottom: 8px; }
+.guide-item { font-size: 10px; color: var(--text2); padding: 3px 0; border-bottom: 1px solid var(--border); line-height: 1.4; }
+.guide-item:last-child { border-bottom: none; }
+.guide-item strong { color: var(--text); }
+.arb-calc-btn { display: block; width: 100%; padding: 7px; margin-top: 6px; font-size: 10px; font-weight: 700; font-family: inherit; cursor: pointer; border-radius: 4px; border: 1px solid var(--border); background: var(--surface2); color: var(--text2); letter-spacing: .5px; transition: .2s; }
+.arb-calc-btn:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- Ticker -->
+<div class="ticker-wrap">
+  <div class="ticker-inner" id="tickerInner"><span style="line-height:32px;color:var(--muted);padding-left:20px">Loading market data...</span></div>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="logo">MARKET<span>INTEL</span></div>
+  <div class="header-nav">
+    <button class="nav-btn active" id="nav-news" onclick="switchRightPanel('news')">NEWS</button>
+    <button class="nav-btn" id="nav-arb" onclick="switchRightPanel('arb')">ARB CALC</button>
+  </div>
+  <div class="last-update"><span class="status-dot"></span><span id="lastUpdate">Connecting...</span></div>
+</header>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- LEFT: Market Panel -->
+  <div class="market-panel">
+    <div class="panel-header">
+      <span class="panel-title">Live Markets</span>
+      <button class="refresh-btn" onclick="refreshMarkets()">↻ Refresh</button>
+    </div>
+    <div class="market-scroll" id="marketList">
+      <div style="padding:20px;color:var(--muted);text-align:center;font-size:11px;">Loading...</div>
+    </div>
+  </div>
+
+  <!-- CENTER: Chat -->
+  <div class="chat-panel">
+    <div class="chat-messages" id="chatMessages">
+      <div class="welcome">
+        <h3>Market Intelligence</h3>
+        <p>Ask about energy prices, commodities,<br>indices, forex, or market trends.<br><br>Switch to <strong style="color:var(--accent)">ARB CALC</strong> to model<br>LNG and crude arbitrage trades.</p>
+      </div>
+    </div>
+    <div class="chips">
+      <button class="chip" onclick="sendChip('What is WTI crude oil price?')">WTI Crude</button>
+      <button class="chip" onclick="sendChip('How is natural gas trading today?')">Nat Gas</button>
+      <button class="chip" onclick="sendChip('Show me energy sector snapshot')">Energy</button>
+      <button class="chip" onclick="sendChip('Top movers today')">Movers</button>
+      <button class="chip" onclick="sendChip('Compare gold and silver')">Gold vs Silver</button>
+      <button class="chip" onclick="sendChip('What is the VIX showing?')">VIX</button>
+      <button class="chip" onclick="switchRightPanel('arb'); return false;">→ Open Arb Calc</button>
+    </div>
+    <div class="input-bar">
+      <textarea class="chat-input" id="chatInput" placeholder="Ask about any market, commodity, or price..." rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: Switchable panel -->
+  <div class="right-panel">
+
+    <!-- NEWS VIEW -->
+    <div class="right-view active" id="view-news">
+      <div class="news-tabs">
+        <div class="news-tab active" onclick="switchNews('Reuters', this)">Reuters</div>
+        <div class="news-tab" onclick="switchNews('Bloomberg', this)">Bloomberg</div>
+        <div class="news-tab" onclick="switchNews('Argus Media', this)">Argus</div>
+      </div>
+      <div class="news-scroll" id="newsContent">
+        <div class="news-loading">Loading news...</div>
+      </div>
+    </div>
+
+    <!-- ARB CALCULATOR VIEW -->
+    <div class="right-view" id="view-arb">
+      <div class="arb-panel">
+        <div class="arb-tabs">
+          <button class="arb-tab active" onclick="switchArbTab('lng', this)">LNG Arb</button>
+          <button class="arb-tab" onclick="switchArbTab('crude', this)">Crude Arb</button>
+          <button class="arb-tab" onclick="switchArbTab('guide', this)">Guide</button>
+        </div>
+        <div class="arb-content">
+
+          <!-- LNG Section -->
+          <div class="arb-section active" id="arb-lng">
+            <div class="field-group">
+              <div class="field-group-title">Route</div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Origin basin</label>
+                  <select id="lng-origin" onchange="lngCalc()">
+                    <option value="us_gulf">US Gulf (HH)</option>
+                    <option value="qatar">Qatar</option>
+                    <option value="australia">Australia</option>
+                    <option value="nigeria">Nigeria</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Destination</label>
+                  <select id="lng-dest" onchange="lngCalc()">
+                    <option value="japan">Japan/Korea (JKM)</option>
+                    <option value="europe">NW Europe (TTF)</option>
+                    <option value="china">China</option>
+                    <option value="india">India</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <div class="field-group-title">Prices</div>
+              <div class="field-row triple">
+                <div class="field">
+                  <label>Buy ($/MMBtu)</label>
+                  <input type="number" id="lng-buy" value="2.80" step="0.05" onchange="lngCalc()">
+                </div>
+                <div class="field">
+                  <label>Sell ($/MMBtu)</label>
+                  <input type="number" id="lng-sell" value="11.50" step="0.05" onchange="lngCalc()">
+                </div>
+                <div class="field">
+                  <label>Cargo (TBtu)</label>
+                  <input type="number" id="lng-cargo" value="3.4" step="0.1" onchange="lngCalc()">
+                </div>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <div class="field-group-title">Cost stack</div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Liquefaction ($/MMBtu)</label>
+                  <input type="number" id="lng-liq" value="2.50" step="0.05" onchange="lngCalc()">
+                </div>
+                <div class="field">
+                  <label>Shipping ($/MMBtu)</label>
+                  <input type="number" id="lng-ship" value="1.80" step="0.05" onchange="lngCalc()">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Regas ($/MMBtu)</label>
+                  <input type="number" id="lng-regas" value="0.50" step="0.05" onchange="lngCalc()">
+                </div>
+                <div class="field">
+                  <label>BOG loss %</label>
+                  <input type="number" id="lng-bog" value="0.15" step="0.01" onchange="lngCalc()">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Port/Canal ($/MMBtu)</label>
+                  <input type="number" id="lng-port" value="0.12" step="0.01" onchange="lngCalc()">
+                </div>
+                <div class="field">
+                  <label>Hedge/Fin ($/MMBtu)</label>
+                  <input type="number" id="lng-hedge" value="0.20" step="0.01" onchange="lngCalc()">
+                </div>
+              </div>
+            </div>
+
+            <div id="lng-results"></div>
+          </div>
+
+          <!-- CRUDE Section -->
+          <div class="arb-section" id="arb-crude">
+            <div class="field-group">
+              <div class="field-group-title">Trade structure</div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Grade</label>
+                  <select id="cr-grade" onchange="crudeCalc()">
+                    <option value="wti">WTI Midland</option>
+                    <option value="espo">ESPO (Russia)</option>
+                    <option value="arab_light">Arab Light</option>
+                    <option value="bonny">Bonny Light</option>
+                    <option value="urals">Urals</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Destination</label>
+                  <select id="cr-dest" onchange="crudeCalc()">
+                    <option value="asia">Asia-Pacific</option>
+                    <option value="europe">NW Europe</option>
+                    <option value="us_gulf">US Gulf Coast</option>
+                    <option value="med">Mediterranean</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <div class="field-group-title">Prices</div>
+              <div class="field-row triple">
+                <div class="field">
+                  <label>Buy ($/bbl)</label>
+                  <input type="number" id="cr-buy" value="72.00" step="0.25" onchange="crudeCalc()">
+                </div>
+                <div class="field">
+                  <label>Benchmark ($/bbl)</label>
+                  <input type="number" id="cr-bench" value="80.50" step="0.25" onchange="crudeCalc()">
+                </div>
+                <div class="field">
+                  <label>Cargo (kb)</label>
+                  <input type="number" id="cr-size" value="2000" step="100" onchange="crudeCalc()">
+                </div>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <div class="field-group-title">Cost stack</div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Freight ($/bbl)</label>
+                  <input type="number" id="cr-freight" value="2.20" step="0.05" onchange="crudeCalc()">
+                </div>
+                <div class="field">
+                  <label>Grade diff ($/bbl)</label>
+                  <input type="number" id="cr-diff" value="-0.80" step="0.05" onchange="crudeCalc()">
+                  <span class="hint">− = discount</span>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Demurrage ($/bbl)</label>
+                  <input type="number" id="cr-dem" value="0.08" step="0.01" onchange="crudeCalc()">
+                </div>
+                <div class="field">
+                  <label>Insurance ($/bbl)</label>
+                  <input type="number" id="cr-ins" value="0.05" step="0.01" onchange="crudeCalc()">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Financing ($/bbl)</label>
+                  <input type="number" id="cr-fin" value="0.12" step="0.01" onchange="crudeCalc()">
+                </div>
+                <div class="field">
+                  <label>Quality adj ($/bbl)</label>
+                  <input type="number" id="cr-qual" value="0.30" step="0.05" onchange="crudeCalc()">
+                  <span class="hint">API/sulphur yield</span>
+                </div>
+              </div>
+            </div>
+
+            <div id="crude-results"></div>
+          </div>
+
+          <!-- GUIDE Section -->
+          <div class="arb-section" id="arb-guide">
+            <div class="guide-block">
+              <h4>LNG full-chain logic</h4>
+              <div class="guide-item"><strong>1.</strong> Purchase at wellhead (Henry Hub / netback)</div>
+              <div class="guide-item"><strong>2.</strong> Add liquefaction tolling — biggest single cost (~$2–3)</div>
+              <div class="guide-item"><strong>3.</strong> Add shipping: voyage + BOG fuel (~0.10–0.15%/day)</div>
+              <div class="guide-item"><strong>4.</strong> Add regas terminal fee at destination</div>
+              <div class="guide-item"><strong>5.</strong> Net = destination price − all costs. Arb open if &gt; 0</div>
+            </div>
+            <div class="guide-block">
+              <h4>Crude arb logic</h4>
+              <div class="guide-item"><strong>1.</strong> Buy at origin: benchmark ± grade differential</div>
+              <div class="guide-item"><strong>2.</strong> Freight via Worldscale: flat rate × WS points ÷ 100</div>
+              <div class="guide-item"><strong>3.</strong> Quality adj: API gravity + sulphur shift refinery yield</div>
+              <div class="guide-item"><strong>4.</strong> Sell at destination benchmark (Brent / Dubai / WTI)</div>
+              <div class="guide-item"><strong>5.</strong> Net = dest value − origin cost − freight − adj</div>
+            </div>
+            <div class="guide-block">
+              <h4>Interview questions to prep</h4>
+              <div class="guide-item">→ Build a full LNG cost stack without prompting</div>
+              <div class="guide-item">→ What moves the Atlantic–Pacific arb? (freight, FX, HH, TTF)</div>
+              <div class="guide-item">→ Explain BOG and why longer voyages cost more</div>
+              <div class="guide-item">→ Why hedge the spread before loading?</div>
+              <div class="guide-item">→ What if the Panama Canal slot falls through?</div>
+              <div class="guide-item">→ How does Brent–Dubai EFS affect East-of-Suez crude?</div>
+            </div>
+            <button class="arb-calc-btn" onclick="switchArbTab('lng', document.querySelector('.arb-tab'))">← Go to LNG Arb Calculator</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let conversationHistory = [];
+let marketData = {};
+let currentNewsSource = 'Reuters';
+let lngChart = null, crChart = null;
+
+// ── Panel switching ────────────────────────────────────────────────────────────
+function switchRightPanel(view) {
+  document.getElementById('view-news').classList.toggle('active', view === 'news');
+  document.getElementById('view-arb').classList.toggle('active', view === 'arb');
+  document.getElementById('nav-news').classList.toggle('active', view === 'news');
+  document.getElementById('nav-arb').classList.toggle('active', view === 'arb');
+  if (view === 'arb') { lngCalc(); }
+}
+
+function switchArbTab(tab, el) {
+  document.querySelectorAll('.arb-tab').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.querySelectorAll('.arb-section').forEach(s => s.classList.remove('active'));
+  document.getElementById('arb-' + tab).classList.add('active');
+  if (tab === 'lng') lngCalc();
+  if (tab === 'crude') crudeCalc();
+}
+
+// ── Market data ───────────────────────────────────────────────────────────────
+async function loadMarketData(force = false) {
+  try {
+    const res = await fetch('/api/market-data' + (force ? '?force=true' : ''));
+    const json = await res.json();
+    if (json.status !== 'ok') return;
+    marketData = json.data;
+    renderMarketList(marketData);
+    renderTicker(marketData);
+    document.getElementById('lastUpdate').textContent = 'Updated: ' + (marketData.timestamp_display || 'now');
+  } catch (e) {
+    document.getElementById('lastUpdate').textContent = 'Market data error';
+  }
+}
+
+function refreshMarkets() { loadMarketData(true); }
+
+const CAT_LABELS = {
+  energy: 'Energy', metals: 'Metals', agriculture: 'Agriculture',
+  indices: 'Indices', forex: 'Forex'
+};
+
+function renderMarketList(data) {
+  const el = document.getElementById('marketList');
+  let html = '';
+  for (const [cat, label] of Object.entries(CAT_LABELS)) {
+    const items = data[cat];
+    if (!items) continue;
+    html += `<div class="cat-header">${label}</div>`;
+    for (const [name, info] of Object.entries(items)) {
+      const price = info.price;
+      const pct = info.change_pct;
+      const priceStr = price == null ? 'N/A'
+        : price < 100 ? price.toFixed(4)
+        : price.toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const unit = info.unit ? ' ' + info.unit : '';
+      let cls = 'flat', arrow = '→', pctStr = '';
+      if (pct != null) {
+        cls = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+        arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '→';
+        pctStr = (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+      }
+      html += `<div class="market-row" onclick="askAbout('${name.replace(/'/g,"\\'")}')">
+        <span class="name" title="${name}">${name}</span>
+        <span class="price">${priceStr}${unit}</span>
+        <span class="chg ${cls}">${arrow}${pctStr}</span>
+      </div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+function renderTicker(data) {
+  const items = [];
+  for (const cat of ['energy','metals','indices','forex']) {
+    const section = data[cat];
+    if (!section) continue;
+    for (const [name, info] of Object.entries(section)) {
+      if (info.price == null) continue;
+      const p = info.price < 100
+        ? info.price.toFixed(3)
+        : info.price.toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const pct = info.change_pct;
+      const cls = pct > 0 ? 'up' : pct < 0 ? 'down' : '';
+      const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '';
+      const pctStr = pct != null ? `${arrow}${Math.abs(pct).toFixed(2)}%` : '';
+      items.push(`<span class="ticker-item"><span class="sym">${name}</span> <span class="price">${p}</span><span class="chg ${cls}">${pctStr}</span></span>`);
+    }
+  }
+  // Duplicate for seamless loop
+  const inner = items.join('') + items.join('');
+  document.getElementById('tickerInner').innerHTML = inner;
+}
+
+function askAbout(name) {
+  document.getElementById('chatInput').value = `What is the current price and status of ${name}?`;
+  sendMessage();
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function sendChip(text) {
+  document.getElementById('chatInput').value = text;
+  sendMessage();
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatText(text) {
+  return escHtml(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code style="background:#1a2a3a;padding:1px 4px;border-radius:3px">$1</code>')
+    .replace(/\n/g, '<br>');
+}
+
+function appendMsg(role, text) {
+  const container = document.getElementById('chatMessages');
+  const welcome = container.querySelector('.welcome');
+  if (welcome) welcome.remove();
+  const msg = document.createElement('div');
+  msg.className = `msg ${role}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.innerHTML = formatText(text);
+  msg.appendChild(bubble);
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showTyping() {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  div.id = 'typingMsg';
+  div.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function hideTyping() {
+  const el = document.getElementById('typingMsg');
+  if (el) el.remove();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const btn = document.getElementById('sendBtn');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.style.height = 'auto';
+  btn.disabled = true;
+  appendMsg('user', text);
+  showTyping();
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, history: conversationHistory.slice(-40) })
+    });
+    const json = await res.json();
+    hideTyping();
+    const reply = json.reply || json.error || 'No response.';
+    appendMsg('bot', reply);
+    conversationHistory.push({ role: 'user', content: text });
+    conversationHistory.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    hideTyping();
+    appendMsg('bot', 'Error: ' + e.message);
+  }
+  btn.disabled = false;
+  input.focus();
+}
+
+// ── News ──────────────────────────────────────────────────────────────────────
+const BADGE_CLASS = { 'Reuters': 'badge-reuters', 'Bloomberg': 'badge-bloomberg', 'Argus Media': 'badge-argus' };
+
+function formatPubDate(pub) {
+  try {
+    const d = new Date(pub);
+    if (isNaN(d.getTime())) return pub;
+    return d.toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return pub; }
+}
+
+async function loadNews(source) {
+  const el = document.getElementById('newsContent');
+  el.innerHTML = '<div class="news-loading">Loading...</div>';
+  try {
+    const res = await fetch('/api/news?source=' + encodeURIComponent(source));
+    const json = await res.json();
+    if (json.status !== 'ok' || !json.articles || !json.articles.length) {
+      el.innerHTML = '<div class="news-error">Feed unavailable right now.</div>';
+      return;
+    }
+    const badgeCls = BADGE_CLASS[source] || '';
+    let html = '';
+    for (const a of json.articles) {
+      const href = a.link || '#';
+      const target = href === '#' ? '' : 'target="_blank" rel="noopener"';
+      const timeStr = a.pub ? `<div class="news-time">${formatPubDate(a.pub)}</div>` : '';
+      html += `<div class="news-item">
+        <span class="news-badge ${badgeCls}">${escHtml(source)}</span>
+        <a href="${escHtml(href)}" ${target}>${escHtml(a.title)}</a>
+        ${timeStr}
+      </div>`;
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="news-error">News feed unavailable.</div>';
+  }
+}
+
+function switchNews(source, tab) {
+  currentNewsSource = source;
+  document.querySelectorAll('.news-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  loadNews(source);
+}
+
+// ── ARB CALCULATOR ────────────────────────────────────────────────────────────
+function fmt(v, dp=2) { return Number(v).toFixed(dp); }
+function fmtM(v) { return (v >= 0 ? '+' : '') + '$' + Math.abs(Math.round(v/1e6)) + 'M'; }
+
+function lngCalc() {
+  const buy   = +document.getElementById('lng-buy').value   || 0;
+  const sell  = +document.getElementById('lng-sell').value  || 0;
+  const cargo = +document.getElementById('lng-cargo').value || 3.4;
+  const liq   = +document.getElementById('lng-liq').value   || 0;
+  const ship  = +document.getElementById('lng-ship').value  || 0;
+  const regas = +document.getElementById('lng-regas').value || 0;
+  const bogPct= +document.getElementById('lng-bog').value   || 0;
+  const port  = +document.getElementById('lng-port').value  || 0;
+  const hedge = +document.getElementById('lng-hedge').value || 0;
+
+  const bog = buy * (bogPct / 100);
+  const totalCost = buy + liq + ship + regas + bog + port + hedge;
+  const net = sell - totalCost;
+  const cargoUSD = net * cargo * 1e9;
+
+  let verdictClass, verdictTitle, verdictText;
+  if (net > 0.5) {
+    verdictClass = 'open';
+    verdictTitle = '✓ ARB OPEN — Execute';
+    verdictText = `Net of $${fmt(net)}/MMBtu is above transaction costs. Arb is commercial. Confirm vessel on subs and hedge the spread before loading.`;
+  } else if (net > 0) {
+    verdictClass = 'marginal';
+    verdictTitle = '⚠ MARGINAL — Monitor';
+    verdictText = `$${fmt(net)}/MMBtu covers costs but leaves little room. A freight move or delay could close the window.`;
+  } else {
+    verdictClass = 'closed';
+    verdictTitle = '✗ ARB CLOSED — Hold';
+    verdictText = `$${fmt(net)}/MMBtu is negative. Monitor JKM–HH spread. Arb opens when spread widens beyond $${fmt(totalCost)} breakeven.`;
+  }
+
+  const origin = document.getElementById('lng-origin').options[document.getElementById('lng-origin').selectedIndex].text;
+  const dest   = document.getElementById('lng-dest').options[document.getElementById('lng-dest').selectedIndex].text;
+
+  document.getElementById('lng-results').innerHTML = `
+    <div class="result-grid">
+      <div class="rcard"><div class="rlabel">Net / MMBtu</div><div class="rval ${net>=0?'pos':'neg'}">${net>=0?'+':''}$${fmt(net)}</div></div>
+      <div class="rcard"><div class="rlabel">Cargo P&L</div><div class="rval ${net>=0?'pos':'neg'}">${fmtM(cargoUSD)}</div><div class="rsub">${fmt(cargo,1)} TBtu</div></div>
+      <div class="rcard"><div class="rlabel">Breakeven sale</div><div class="rval neutral">$${fmt(totalCost)}/MMBtu</div></div>
+      <div class="rcard"><div class="rlabel">Return on buy</div><div class="rval ${net>=0?'pos':'neg'}">${buy>0?fmt(net/buy*100,1):0}%</div></div>
+    </div>
+    <div class="verdict ${verdictClass}"><div class="vtitle">${verdictTitle}</div><div class="vtext">${verdictText}</div></div>
+    <div class="cost-stack">
+      <div class="cost-stack-title">${origin} → ${dest}</div>
+      <div class="cost-row"><span class="cn">Purchase price</span><span class="cv">$${fmt(buy)}</span></div>
+      <div class="cost-row"><span class="cn">Liquefaction</span><span class="cv">$${fmt(liq)}</span></div>
+      <div class="cost-row"><span class="cn">Shipping</span><span class="cv">$${fmt(ship)}</span></div>
+      <div class="cost-row"><span class="cn">BOG loss (${bogPct}%)</span><span class="cv">$${fmt(bog)}</span></div>
+      <div class="cost-row"><span class="cn">Regas/terminal</span><span class="cv">$${fmt(regas)}</span></div>
+      <div class="cost-row"><span class="cn">Port & canal</span><span class="cv">$${fmt(port)}</span></div>
+      <div class="cost-row"><span class="cn">Hedge/financing</span><span class="cv">$${fmt(hedge)}</span></div>
+      <div class="cost-row total-row"><span class="cn">Total cost</span><span class="cv">$${fmt(totalCost)}/MMBtu</span></div>
+      <div class="cost-row total-row ${net>=0?'pos-row':'neg-row'}"><span class="cn">Net margin</span><span class="cv">${net>=0?'+':''}$${fmt(net)}/MMBtu</span></div>
+    </div>
+    <div class="chart-box"><canvas id="lngChart" role="img" aria-label="LNG cost waterfall"></canvas></div>
+  `;
+
+  if (lngChart) { lngChart.destroy(); lngChart = null; }
+  const ctx = document.getElementById('lngChart');
+  if (!ctx) return;
+  const labels = ['Buy','Liquef.','Ship','BOG','Regas','Port','Hedge','Net'];
+  const vals   = [buy, liq, ship, bog, regas, port, hedge, net];
+  const colors = vals.map((v, i) => i === vals.length - 1 ? (v >= 0 ? '#22c55e' : '#ef4444') : '#0ea5e9');
+  lngChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: vals, backgroundColor: colors, borderRadius: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '$' + fmt(c.raw) + '/MMBtu' } } },
+      scales: {
+        y: { ticks: { callback: v => '$' + fmt(v), color: '#6b7280', font: { size: 9 } }, grid: { color: 'rgba(30,45,69,0.8)' } },
+        x: { ticks: { color: '#6b7280', font: { size: 9 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function crudeCalc() {
+  const buy     = +document.getElementById('cr-buy').value     || 0;
+  const bench   = +document.getElementById('cr-bench').value   || 0;
+  const size    = +document.getElementById('cr-size').value    || 2000;
+  const freight = +document.getElementById('cr-freight').value || 0;
+  const diff    = +document.getElementById('cr-diff').value    || 0;
+  const dem     = +document.getElementById('cr-dem').value     || 0;
+  const ins     = +document.getElementById('cr-ins').value     || 0;
+  const fin     = +document.getElementById('cr-fin').value     || 0;
+  const qual    = +document.getElementById('cr-qual').value    || 0;
+
+  const effectiveCost = buy + freight + dem + ins + fin;
+  const effectiveSell = bench + diff - qual;
+  const net = effectiveSell - effectiveCost;
+  const cargoUSD = net * size * 1000;
+
+  let verdictClass, verdictTitle, verdictText;
+  if (net > 1.5) {
+    verdictClass = 'open';
+    verdictTitle = '✓ ARB OPEN — Execute';
+    verdictText = `$${fmt(net)}/bbl is viable. Cargo P&L: ${fmtM(cargoUSD)} on ${(size/1000).toFixed(0)}mb. Hedge the spread and confirm vessel availability.`;
+  } else if (net > 0) {
+    verdictClass = 'marginal';
+    verdictTitle = '⚠ MARGINAL — At risk';
+    verdictText = `$${fmt(net)}/bbl is within demurrage and freight move range. One day's demurrage or 5 WS-point shift could erase the margin.`;
+  } else {
+    verdictClass = 'closed';
+    verdictTitle = '✗ ARB CLOSED — Hold';
+    verdictText = `Negative at $${fmt(net)}/bbl. Watch Brent–Dubai EFS and freight softening.`;
+  }
+
+  const grade = document.getElementById('cr-grade').options[document.getElementById('cr-grade').selectedIndex].text;
+  const dest  = document.getElementById('cr-dest').options[document.getElementById('cr-dest').selectedIndex].text;
+
+  document.getElementById('crude-results').innerHTML = `
+    <div class="result-grid">
+      <div class="rcard"><div class="rlabel">Net / bbl</div><div class="rval ${net>=0?'pos':'neg'}">${net>=0?'+':''}$${fmt(net)}</div></div>
+      <div class="rcard"><div class="rlabel">Cargo P&L</div><div class="rval ${net>=0?'pos':'neg'}">${fmtM(cargoUSD)}</div><div class="rsub">${(size/1000).toFixed(0)}mb</div></div>
+      <div class="rcard"><div class="rlabel">Delivered cost</div><div class="rval neutral">$${fmt(effectiveCost)}/bbl</div></div>
+      <div class="rcard"><div class="rlabel">Net sell value</div><div class="rval neutral">$${fmt(effectiveSell)}/bbl</div></div>
+    </div>
+    <div class="verdict ${verdictClass}"><div class="vtitle">${verdictTitle}</div><div class="vtext">${verdictText}</div></div>
+    <div class="cost-stack">
+      <div class="cost-stack-title">${grade} → ${dest}</div>
+      <div class="cost-row"><span class="cn">Purchase price</span><span class="cv">$${fmt(buy)}</span></div>
+      <div class="cost-row"><span class="cn">Freight</span><span class="cv">$${fmt(freight)}</span></div>
+      <div class="cost-row"><span class="cn">Demurrage provision</span><span class="cv">$${fmt(dem)}</span></div>
+      <div class="cost-row"><span class="cn">Insurance & misc</span><span class="cv">$${fmt(ins)}</span></div>
+      <div class="cost-row"><span class="cn">Financing</span><span class="cv">$${fmt(fin)}</span></div>
+      <div class="cost-row total-row"><span class="cn">Total delivered cost</span><span class="cv">$${fmt(effectiveCost)}/bbl</span></div>
+      <div class="cost-row"><span class="cn">Destination benchmark</span><span class="cv">$${fmt(bench)}</span></div>
+      <div class="cost-row"><span class="cn">Grade differential</span><span class="cv">${diff>=0?'+':''}$${fmt(diff)}</span></div>
+      <div class="cost-row"><span class="cn">Quality adjustment</span><span class="cv">-$${fmt(qual)}</span></div>
+      <div class="cost-row total-row"><span class="cn">Net sell value</span><span class="cv">$${fmt(effectiveSell)}/bbl</span></div>
+      <div class="cost-row total-row ${net>=0?'pos-row':'neg-row'}"><span class="cn">Net margin</span><span class="cv">${net>=0?'+':''}$${fmt(net)}/bbl</span></div>
+    </div>
+    <div class="chart-box"><canvas id="crChart" role="img" aria-label="Crude arb waterfall"></canvas></div>
+  `;
+
+  if (crChart) { crChart.destroy(); crChart = null; }
+  const ctx = document.getElementById('crChart');
+  if (!ctx) return;
+  const labels = ['Buy','Freight','Demurr.','Insur.','Fin.','Grade diff','Qual adj','Net'];
+  const vals   = [buy, freight, dem, ins, fin, diff, -qual, net];
+  const colors = vals.map((v, i) => i === vals.length - 1 ? (v >= 0 ? '#22c55e' : '#ef4444') : (v < 0 ? '#0f6e56' : '#0ea5e9'));
+  crChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: vals, backgroundColor: colors, borderRadius: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '$' + fmt(c.raw) + '/bbl' } } },
+      scales: {
+        y: { ticks: { callback: v => '$' + fmt(v), color: '#6b7280', font: { size: 9 } }, grid: { color: 'rgba(30,45,69,0.8)' } },
+        x: { ticks: { color: '#6b7280', font: { size: 9 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadMarketData();
+loadNews('Reuters');
+setInterval(() => loadMarketData(), 5 * 60 * 1000);
+setInterval(() => loadNews(currentNewsSource), 10 * 60 * 1000);
+</script>
+</body>
+</html>
