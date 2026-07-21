@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Intelligence</title>
+<style>
+:root {
+  --bg: #0a0e1a;
+  --surface: #111827;
+  --surface2: #1a2235;
+  --border: #1e2d45;
+  --accent: #00d4aa;
+  --up: #22c55e;
+  --down: #ef4444;
+  --muted: #6b7280;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+.ticker-wrap { background: #060a14; border-bottom: 1px solid var(--border); height: 32px; overflow: hidden; white-space: nowrap; position: relative; }
+.ticker-inner { display: inline-flex; animation: scroll-ticker 80s linear infinite; }
+.ticker-inner:hover { animation-play-state: paused; }
+.ticker-item { display: inline-block; margin-right: 40px; white-space: nowrap; line-height: 32px; }
+.ticker-item .sym { color: var(--text2); font-size: 11px; }
+.ticker-item .price { color: var(--text); font-weight: 600; margin: 0 4px; }
+.ticker-item .chg.up { color: var(--up); }
+.ticker-item .chg.down { color: var(--down); }
+@keyframes scroll-ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+.logo { color: var(--accent); font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+.logo span { color: var(--text2); font-weight: 400; }
+.last-update { margin-left: auto; color: var(--muted); font-size: 11px; }
+.status-dot { width: 7px; height: 7px; background: var(--up); border-radius: 50%; display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+.arb-launch-btn { background: var(--accent); color: #000; border: none; padding: 6px 18px; border-radius: 4px; cursor: pointer; font-weight: 700; font-size: 12px; font-family: inherit; letter-spacing: .5px; transition: .2s; }
+.arb-launch-btn:hover { opacity: .85; }
+
+.main { display: grid; grid-template-columns: 240px 1fr 320px; flex: 1; overflow: hidden; }
+
+.market-panel { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.panel-header { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.panel-title { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.refresh-btn { background: none; border: 1px solid var(--border); color: var(--text2); padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: inherit; transition: .2s; }
+.refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+.market-scroll { flex: 1; overflow-y: auto; padding: 6px 0; }
+.market-scroll::-webkit-scrollbar { width: 4px; }
+.market-scroll::-webkit-scrollbar-track { background: transparent; }
+.market-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.cat-header { padding: 8px 14px 4px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.market-row { display: flex; align-items: center; padding: 5px 14px; cursor: pointer; transition: background .15s; gap: 6px; }
+.market-row:hover { background: var(--surface2); }
+.market-row .name { flex: 1; color: var(--text2); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.market-row .price { color: var(--text); font-weight: 600; font-size: 11px; white-space: nowrap; }
+.market-row .chg { font-size: 10px; white-space: nowrap; }
+.chg.up { color: var(--up); }
+.chg.down { color: var(--down); }
+.chg.flat { color: var(--muted); }
+
+.chat-panel { display: flex; flex-direction: column; overflow: hidden; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.chat-messages::-webkit-scrollbar { width: 4px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.msg { max-width: 92%; display: flex; flex-direction: column; gap: 4px; }
+.msg.user { align-self: flex-end; }
+.msg.bot { align-self: flex-start; }
+.msg .bubble { padding: 10px 14px; border-radius: 12px; line-height: 1.6; white-space: pre-wrap; font-size: 12.5px; }
+.msg.user .bubble { background: #1e3a5f; color: var(--text); border-bottom-right-radius: 3px; }
+.msg.bot .bubble { background: var(--surface2); color: var(--text); border-bottom-left-radius: 3px; }
+.typing-indicator { display: flex; gap: 4px; padding: 10px 14px; background: var(--surface2); border-radius: 12px; border-bottom-left-radius: 3px; width: fit-content; }
+.typing-indicator span { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: bounce 1.2s infinite; }
+.typing-indicator span:nth-child(2) { animation-delay: .2s; }
+.typing-indicator span:nth-child(3) { animation-delay: .4s; }
+@keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 16px; border-top: 1px solid var(--border); }
+.chip { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); padding: 4px 10px; border-radius: 14px; cursor: pointer; font-size: 11px; font-family: inherit; transition: .2s; white-space: nowrap; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.input-bar { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--surface); }
+.chat-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 9px 14px; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; resize: none; max-height: 100px; transition: border .2s; }
+.chat-input:focus { border-color: var(--accent); }
+.send-btn { background: var(--accent); color: #000; border: none; padding: 9px 16px; border-radius: 8px; cursor: pointer; font-weight: 700; font-family: inherit; font-size: 13px; transition: .2s; }
+.send-btn:hover { opacity: .85; }
+.send-btn:disabled { opacity: .4; cursor: not-allowed; }
+.welcome { text-align: center; padding: 40px 20px; color: var(--muted); }
+.welcome h3 { color: var(--accent); margin-bottom: 10px; font-size: 15px; }
+.welcome p { font-size: 11px; line-height: 1.7; }
+
+.right-panel { background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.news-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.news-tab { flex: 1; padding: 9px 2px; text-align: center; cursor: pointer; font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid transparent; transition: .2s; }
+.news-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.news-tab:hover:not(.active) { color: var(--text2); }
+.news-scroll { flex: 1; overflow-y: auto; padding: 6px 0; }
+.news-scroll::-webkit-scrollbar { width: 4px; }
+.news-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.news-item { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.news-item:last-child { border-bottom: none; }
+.news-item:hover { background: var(--surface2); }
+.news-item a { color: var(--text); text-decoration: none; font-size: 11.5px; line-height: 1.5; display: block; }
+.news-item a:hover { color: var(--accent); }
+.news-time { color: var(--muted); font-size: 9.5px; margin-top: 4px; }
+.news-loading { padding: 20px; text-align: center; color: var(--muted); font-size: 11px; }
+.news-error { padding: 12px; color: var(--down); font-size: 11px; text-align: center; }
+.news-badge { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .5px; padding: 1px 5px; border-radius: 3px; margin-bottom: 4px; text-transform: uppercase; }
+.badge-energy { background: #e65c00; color: #fff; }
+.badge-eia { background: #1464b4; color: #fff; }
+.badge-oilprice { background: #c2410c; color: #fff; }
+.badge-argus { background: #1d4e89; color: #fff; }
+.badge-baltic { background: #0e6e4f; color: #fff; }
+
+/* Market Read panel */
+.read-tab { color: #f59e0b !important; }
+.read-tab.active { color: #f59e0b !important; border-bottom-color: #f59e0b !important; }
+.read-summary { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.read-bias { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.read-counts { font-size: 10px; color: var(--muted); display: flex; gap: 12px; }
+.read-counts .bull-count { color: var(--up); }
+.read-counts .bear-count { color: var(--down); }
+.read-item { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.read-item:last-child { border-bottom: none; }
+.read-item:hover { background: var(--surface2); }
+.read-item a { color: var(--text); text-decoration: none; font-size: 11px; line-height: 1.5; display: block; margin-bottom: 4px; }
+.read-item a:hover { color: var(--accent); }
+.read-signal { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; margin-bottom: 5px; }
+.read-signal.bullish { background: rgba(34,197,94,0.15); color: var(--up); }
+.read-signal.bearish { background: rgba(239,68,68,0.15); color: var(--down); }
+.read-reason { font-size: 10px; color: var(--text2); font-style: italic; }
+.read-disclaimer { padding: 12px 14px; font-size: 9.5px; color: var(--muted); line-height: 1.6; border-top: 1px solid var(--border); background: var(--surface); }
+</style>
+</head>
+<body>
+
+<div class="ticker-wrap">
+  <div class="ticker-inner" id="tickerInner"><span style="line-height:32px;color:var(--muted);padding-left:20px">Loading market data...</span></div>
+</div>
+
+<header>
+  <div class="logo">MARKET<span>INTEL</span></div>
+  <button class="arb-launch-btn" onclick="window.location.href='/arb'">ARB CALC</button>
+  <div class="last-update"><span class="status-dot"></span><span id="lastUpdate">Connecting...</span></div>
+</header>
+
+<div class="main">
+
+  <div class="market-panel">
+    <div class="panel-header">
+      <span class="panel-title">Live Markets</span>
+      <button class="refresh-btn" onclick="refreshMarkets()">Refresh</button>
+    </div>
+    <div class="market-scroll" id="marketList">
+      <div style="padding:20px;color:var(--muted);text-align:center;font-size:11px;">Loading...</div>
+    </div>
+  </div>
+
+  <div class="chat-panel">
+    <div class="chat-messages" id="chatMessages">
+      <div class="welcome">
+        <h3>Market Intelligence</h3>
+        <p>Ask about energy prices, commodities,<br>indices, forex, or market trends.<br><br>Click <strong style="color:var(--accent)">ARB CALC</strong> above to open the<br>LNG and Crude arbitrage calculator<br>in a separate window.</p>
+      </div>
+    </div>
+    <div class="chips">
+      <button class="chip" onclick="sendChip('What is WTI crude oil price?')">WTI Crude</button>
+      <button class="chip" onclick="sendChip('How is natural gas trading today?')">Nat Gas</button>
+      <button class="chip" onclick="sendChip('Show me energy sector snapshot')">Energy</button>
+      <button class="chip" onclick="sendChip('Top movers today')">Movers</button>
+      <button class="chip" onclick="sendChip('Compare gold and silver')">Gold vs Silver</button>
+      <button class="chip" onclick="sendChip('What is the VIX showing?')">VIX</button>
+    </div>
+    <div class="input-bar">
+      <textarea class="chat-input" id="chatInput" placeholder="Ask about any market, commodity, or price..." rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="news-tabs">
+      <div class="news-tab active" onclick="switchNews('Energy', this)">Energy</div>
+      <div class="news-tab" onclick="switchNews('EIA', this)">EIA</div>
+      <div class="news-tab" onclick="switchNews('OilPrice', this)">OilPrice</div>
+      <div class="news-tab" onclick="switchNews('Argus', this)">Argus</div>
+      <div class="news-tab" onclick="switchNews('Baltic', this)">Baltic</div>
+      <div class="news-tab read-tab" onclick="loadMarketRead()">Read</div>
+    </div>
+    <div class="news-scroll" id="newsContent">
+      <div class="news-loading">Loading news...</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let conversationHistory = [];
+let marketData = {};
+let currentNewsSource = 'Energy';
+
+async function loadMarketData(force) {
+  try {
+    const res = await fetch('/api/market-data' + (force ? '?force=true' : ''));
+    const json = await res.json();
+    if (json.status !== 'ok') return;
+    marketData = json.data;
+    renderMarketList(marketData);
+    renderTicker(marketData);
+    document.getElementById('lastUpdate').textContent = 'Updated: ' + (marketData.timestamp_display || 'now');
+  } catch (e) {
+    document.getElementById('lastUpdate').textContent = 'Market data error';
+  }
+}
+
+function refreshMarkets() { loadMarketData(true); }
+
+const CAT_LABELS = {
+  energy: 'Energy', metals: 'Metals', agriculture: 'Agriculture',
+  indices: 'Indices', forex: 'Forex'
+};
+
+function renderMarketList(data) {
+  const el = document.getElementById('marketList');
+  let html = '';
+  for (const cat in CAT_LABELS) {
+    const items = data[cat];
+    if (!items) continue;
+    html += '<div class="cat-header">' + CAT_LABELS[cat] + '</div>';
+    for (const name in items) {
+      const info = items[name];
+      const price = info.price;
+      const pct = info.change_pct;
+      let priceStr = 'N/A';
+      if (price != null) {
+        priceStr = price < 100 ? price.toFixed(4) : price.toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
+      }
+      const unit = info.unit ? ' ' + info.unit : '';
+      let cls = 'flat', arrow = '-', pctStr = '';
+      if (pct != null) {
+        cls = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+        arrow = pct > 0 ? '+' : pct < 0 ? '-' : '';
+        pctStr = (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+      }
+      const safeName = name.replace(/'/g, "\\'");
+      html += '<div class="market-row" onclick="askAbout(\'' + safeName + '\')">' +
+        '<span class="name" title="' + name + '">' + name + '</span>' +
+        '<span class="price">' + priceStr + unit + '</span>' +
+        '<span class="chg ' + cls + '">' + pctStr + '</span></div>';
+    }
+  }
+  el.innerHTML = html;
+}
+
+function renderTicker(data) {
+  const items = [];
+  const cats = ['energy','metals','indices','forex'];
+  for (let c = 0; c < cats.length; c++) {
+    const section = data[cats[c]];
+    if (!section) continue;
+    for (const name in section) {
+      const info = section[name];
+      if (info.price == null) continue;
+      const p = info.price < 100 ? info.price.toFixed(3) : info.price.toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const pct = info.change_pct;
+      const cls = pct > 0 ? 'up' : pct < 0 ? 'down' : '';
+      const pctStr = pct != null ? (pct > 0 ? '+' : '') + pct.toFixed(2) + '%' : '';
+      items.push('<span class="ticker-item"><span class="sym">' + name + '</span> <span class="price">' + p + '</span><span class="chg ' + cls + '">' + pctStr + '</span></span>');
+    }
+  }
+  document.getElementById('tickerInner').innerHTML = items.join('') + items.join('');
+}
+
+function askAbout(name) {
+  document.getElementById('chatInput').value = 'What is the current price and status of ' + name + '?';
+  sendMessage();
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function sendChip(text) {
+  document.getElementById('chatInput').value = text;
+  sendMessage();
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatText(text) {
+  return escHtml(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+function appendMsg(role, text) {
+  const container = document.getElementById('chatMessages');
+  const welcome = container.querySelector('.welcome');
+  if (welcome) welcome.remove();
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + role;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.innerHTML = formatText(text);
+  msg.appendChild(bubble);
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showTyping() {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  div.id = 'typingMsg';
+  div.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function hideTyping() {
+  const el = document.getElementById('typingMsg');
+  if (el) el.remove();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const btn = document.getElementById('sendBtn');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.style.height = 'auto';
+  btn.disabled = true;
+  appendMsg('user', text);
+  showTyping();
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, history: conversationHistory.slice(-40) })
+    });
+    const json = await res.json();
+    hideTyping();
+    const reply = json.reply || json.error || 'No response.';
+    appendMsg('bot', reply);
+    conversationHistory.push({ role: 'user', content: text });
+    conversationHistory.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    hideTyping();
+    appendMsg('bot', 'Error: ' + e.message);
+  }
+  btn.disabled = false;
+  input.focus();
+}
+
+const BADGE_CLASS = {
+  'Energy': 'badge-energy',
+  'EIA': 'badge-eia',
+  'OilPrice': 'badge-oilprice',
+  'Argus': 'badge-argus',
+  'Baltic': 'badge-baltic'
+};
+
+function formatPubDate(pub) {
+  try {
+    const d = new Date(pub);
+    if (isNaN(d.getTime())) return pub;
+    return d.toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return pub; }
+}
+
+async function loadNews(source) {
+  const el = document.getElementById('newsContent');
+  el.innerHTML = '<div class="news-loading">Loading...</div>';
+  try {
+    const res = await fetch('/api/news?source=' + encodeURIComponent(source));
+    const json = await res.json();
+    if (json.status !== 'ok' || !json.articles || !json.articles.length) {
+      el.innerHTML = '<div class="news-error">Feed unavailable right now.</div>';
+      return;
+    }
+    const badgeCls = BADGE_CLASS[source] || '';
+    let html = '';
+    for (let i = 0; i < json.articles.length; i++) {
+      const a = json.articles[i];
+      const href = a.link || '#';
+      const target = href === '#' ? '' : 'target="_blank" rel="noopener"';
+      const timeStr = a.pub ? '<div class="news-time">' + formatPubDate(a.pub) + '</div>' : '';
+      html += '<div class="news-item">' +
+        '<span class="news-badge ' + badgeCls + '">' + escHtml(source) + '</span>' +
+        '<a href="' + escHtml(href) + '" ' + target + '>' + escHtml(a.title) + '</a>' +
+        timeStr + '</div>';
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="news-error">News feed unavailable.</div>';
+  }
+}
+
+function switchNews(source, tab) {
+  currentNewsSource = source;
+  const tabs = document.querySelectorAll('.news-tab');
+  for (let i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
+  tab.classList.add('active');
+  loadNews(source);
+}
+
+async function loadMarketRead() {
+  const tabs = document.querySelectorAll('.news-tab');
+  for (let i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
+  document.querySelector('.read-tab').classList.add('active');
+
+  const el = document.getElementById('newsContent');
+  el.innerHTML = '<div class="news-loading">Scanning today\'s headlines...</div>';
+
+  try {
+    const res = await fetch('/api/market-read');
+    const json = await res.json();
+    if (json.status !== 'ok') {
+      el.innerHTML = '<div class="news-error">Market Read unavailable right now.</div>';
+      return;
+    }
+
+    let biasColor = '#94a3b8';
+    if (json.bias.toLowerCase().includes('bullish')) biasColor = '#22c55e';
+    if (json.bias.toLowerCase().includes('bearish')) biasColor = '#ef4444';
+
+    let html = '<div class="read-summary">' +
+      '<div class="read-bias" style="color:' + biasColor + '">' + escHtml(json.bias) + '</div>' +
+      '<div class="read-counts"><span class="bull-count">▲ ' + json.bullish_count + ' bullish</span><span class="bear-count">▼ ' + json.bearish_count + ' bearish</span></div>' +
+      '</div>';
+
+    if (json.tagged && json.tagged.length) {
+      for (let i = 0; i < json.tagged.length; i++) {
+        const t = json.tagged[i];
+        html += '<div class="read-item">' +
+          '<span class="read-signal ' + t.signal + '">' + (t.signal === 'bullish' ? '▲ Bullish' : '▼ Bearish') + '</span>' +
+          '<a href="' + escHtml(t.link) + '" target="_blank" rel="noopener">' + escHtml(t.title) + '</a>' +
+          '<div class="read-reason">' + escHtml(t.reason) + '</div>' +
+          '</div>';
+      }
+    } else {
+      html += '<div class="news-loading">No strong directional signals in today\'s headlines.</div>';
+    }
+
+    html += '<div class="read-disclaimer">' + escHtml(json.disclaimer) + '</div>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="news-error">Market Read unavailable.</div>';
+  }
+}
+
+loadMarketData(false);
+loadNews('Energy');
+setInterval(function() { loadMarketData(false); }, 5 * 60 * 1000);
+setInterval(function() { loadNews(currentNewsSource); }, 10 * 60 * 1000);
+</script>
+</body>
+</html>

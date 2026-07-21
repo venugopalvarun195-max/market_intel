@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arb Calculator — MarketIntel</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg:#0a0e1a;--surface:#111827;--surface2:#1a2235;--border:#1e2d45;
+  --accent:#00d4aa;--up:#22c55e;--down:#ef4444;--muted:#6b7280;
+  --text:#e2e8f0;--text2:#94a3b8;
+  --arb-open-bg:#0a2e25;--arb-open-border:#1a5c45;
+  --arb-closed-bg:#2a0f0f;--arb-closed-border:#5c1a1a;
+  --arb-marginal-bg:#2a1f08;--arb-marginal-border:#5c3a0a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code','Consolas',monospace;font-size:13px;min-height:100vh;display:flex;flex-direction:column}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+.logo{color:var(--accent);font-size:16px;font-weight:700;letter-spacing:1px}
+.logo span{color:var(--text2);font-weight:400}
+.subtitle{color:var(--muted);font-size:11px}
+.close-btn{margin-left:auto;background:none;border:1px solid var(--border);color:var(--text2);padding:5px 14px;border-radius:4px;cursor:pointer;font-size:11px;font-family:inherit;transition:.2s}
+.close-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.tab{padding:11px 28px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent;transition:.2s;background:none;border-top:none;border-left:none;border-right:none;font-family:inherit}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab:hover:not(.active){color:var(--text2)}
+
+.content{flex:1;overflow-y:auto;padding:32px 40px}
+.section{display:none}.section.active{display:block}
+
+/* Two-column layout for inputs + results */
+.calc-layout{display:grid;grid-template-columns:420px 1fr;gap:36px;align-items:start}
+.inputs-col{}
+.results-col{}
+
+.field-group{margin-bottom:18px}
+.field-group-title{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:8px 0 6px;border-bottom:1px solid var(--border);margin-bottom:10px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.field-row.triple{grid-template-columns:1fr 1fr 1fr}
+.field-row.single{grid-template-columns:1fr}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.field input,.field select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:5px;font-size:13px;font-family:inherit;width:100%;outline:none;transition:border .2s;height:36px}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.field .hint{font-size:9px;color:var(--muted);margin-top:2px}
+
+/* Result cards */
+.result-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.rcard{background:var(--surface2);border-radius:8px;padding:14px 16px;border:1px solid var(--border)}
+.rcard .rlabel{font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.rcard .rval{font-size:28px;font-weight:700}
+.rcard .rsub{font-size:10px;color:var(--muted);margin-top:4px}
+.rval.pos{color:var(--up)}.rval.neg{color:var(--down)}.rval.neutral{color:var(--text)}
+
+/* Verdict */
+.verdict{border-radius:8px;padding:14px 18px;margin-bottom:16px;border:1px solid}
+.verdict.open{background:var(--arb-open-bg);border-color:var(--arb-open-border)}
+.verdict.closed{background:var(--arb-closed-bg);border-color:var(--arb-closed-border)}
+.verdict.marginal{background:var(--arb-marginal-bg);border-color:var(--arb-marginal-border)}
+.verdict .vtitle{font-size:14px;font-weight:700;margin-bottom:6px}
+.verdict.open .vtitle{color:#22c55e}.verdict.closed .vtitle{color:#ef4444}.verdict.marginal .vtitle{color:#f59e0b}
+.verdict .vtext{font-size:12px;color:var(--text2);line-height:1.6}
+
+/* Cost stack */
+.cost-stack{background:var(--surface2);border-radius:8px;border:1px solid var(--border);padding:14px 16px;margin-bottom:16px}
+.cost-stack-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;font-weight:700}
+.cost-row{display:flex;justify-content:space-between;padding:5px 0;font-size:11px;border-bottom:1px solid rgba(30,45,69,0.6)}
+.cost-row:last-child{border-bottom:none;margin-top:6px;padding-top:8px;font-weight:700;font-size:12px}
+.cost-row .cn{color:var(--text2)}.cost-row .cv{color:var(--text);font-variant-numeric:tabular-nums}
+.cost-row.total-row .cn,.cost-row.total-row .cv{color:var(--text)}
+.cost-row.pos-row .cv{color:var(--up)}.cost-row.neg-row .cv{color:var(--down)}
+
+/* Chart — bigger now that we have space */
+.chart-box{position:relative;height:320px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);padding:16px;margin-bottom:16px}
+
+/* Guide */
+.guide-layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.guide-block{background:var(--surface2);border-radius:8px;border:1px solid var(--border);padding:16px 18px}
+.guide-block h4{color:var(--accent);font-size:10px;letter-spacing:.8px;text-transform:uppercase;margin-bottom:12px;font-weight:700}
+.guide-item{font-size:11px;color:var(--text2);padding:5px 0;border-bottom:1px solid var(--border);line-height:1.5}
+.guide-item:last-child{border-bottom:none}
+.guide-item strong{color:var(--text)}
+
+/* Market Comparison */
+.cmp-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:start;margin-bottom:20px}
+.cmp-col{background:var(--surface2);border-radius:10px;border:1px solid var(--border);padding:18px 20px}
+.cmp-col-header{font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.cmp-vs{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:1px;padding-top:60px}
+.cmp-result-box{margin-top:16px;padding:16px;border-radius:8px;background:var(--bg);border:1px solid var(--border)}
+.cmp-result-box .cmp-margin{font-size:30px;font-weight:700}
+.cmp-result-box .cmp-margin.pos{color:var(--up)}
+.cmp-result-box .cmp-margin.neg{color:var(--down)}
+.cmp-result-box .cmp-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.cmp-result-box .cmp-sub{font-size:11px;color:var(--text2);margin-top:6px}
+.cmp-result-box .cmp-rate{font-size:11px;color:var(--text2);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.winner-badge{display:inline-block;background:var(--up);color:#000;font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:10px;margin-left:8px;text-transform:uppercase;vertical-align:middle}
+.cmp-verdict{border-radius:10px;padding:20px 24px;margin-bottom:16px;border:1px solid var(--arb-open-border);background:var(--arb-open-bg)}
+.cmp-verdict.tight{border-color:var(--arb-marginal-border);background:var(--arb-marginal-bg)}
+.cmp-verdict .cv-title{font-size:16px;font-weight:700;margin-bottom:8px;color:#22c55e}
+.cmp-verdict.tight .cv-title{color:#f59e0b}
+.cmp-verdict .cv-text{font-size:12px;color:var(--text2);line-height:1.7}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">MARKET<span>INTEL</span> — Arb Calculator</div>
+    <div class="subtitle">Market Comparison · LNG & Crude Arbitrage · Full Cost Stack Model</div>
+  </div>
+  <button class="close-btn" onclick="window.location.href='/'">← Back to Markets</button>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('compare',this)">Market Comparison</button>
+  <button class="tab" onclick="switchTab('lng',this)">LNG Arbitrage</button>
+  <button class="tab" onclick="switchTab('crude',this)">Crude Arbitrage</button>
+  <button class="tab" onclick="switchTab('guide',this)">Interview Guide</button>
+</div>
+
+<div class="content">
+
+  <!-- MARKET COMPARISON — side by side, tells you which is more profitable -->
+  <div class="section active" id="sec-compare">
+    <div class="field-group" style="margin-bottom:24px">
+      <div class="field-group-title">Compare Two Destination Markets For The Same Cargo</div>
+      <div class="field-row triple">
+        <div class="field">
+          <label>Trade type</label>
+          <select id="cmp-type" onchange="compareCalc()">
+            <option value="lng">LNG (price in $/MMBtu)</option>
+            <option value="crude">Crude (price in $/bbl)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Purchase price (origin)</label>
+          <input type="number" id="cmp-buy" value="2.80" step="0.05" onchange="compareCalc()">
+        </div>
+        <div class="field">
+          <label>Cargo size</label>
+          <input type="number" id="cmp-size" value="3.4" step="0.1" onchange="compareCalc()">
+          <span class="hint" id="cmp-size-hint">TBtu (LNG) or kb (crude)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cmp-grid">
+      <!-- MARKET A -->
+      <div class="cmp-col">
+        <div class="cmp-col-header" id="cmp-a-header">MARKET A</div>
+        <div class="field">
+          <label>Destination market</label>
+          <select id="cmp-a-dest" onchange="compareCalc()">
+            <option value="japan">Japan / Korea (JKM)</option>
+            <option value="europe">NW Europe (TTF)</option>
+            <option value="china">China</option>
+            <option value="india">India</option>
+            <option value="asia_crude">Asia-Pacific (crude)</option>
+            <option value="europe_crude">NW Europe (crude)</option>
+            <option value="us_gulf_crude">US Gulf Coast (crude)</option>
+            <option value="med_crude">Mediterranean (crude)</option>
+          </select>
+        </div>
+        <div class="field-row" style="margin-top:10px">
+          <div class="field"><label>Sale price at destination</label><input type="number" id="cmp-a-sell" value="11.50" step="0.05" onchange="compareCalc()"></div>
+          <div class="field"><label>Freight / shipping cost</label><input type="number" id="cmp-a-freight" value="1.80" step="0.05" onchange="compareCalc()"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Other costs (regas/port/fees)</label><input type="number" id="cmp-a-other" value="0.82" step="0.05" onchange="compareCalc()"></div>
+          <div class="field"><label>Voyage days</label><input type="number" id="cmp-a-days" value="20" step="1" onchange="compareCalc()"></div>
+        </div>
+        <div id="cmp-a-results"></div>
+      </div>
+
+      <!-- VS divider -->
+      <div class="cmp-vs">VS</div>
+
+      <!-- MARKET B -->
+      <div class="cmp-col">
+        <div class="cmp-col-header" id="cmp-b-header">MARKET B</div>
+        <div class="field">
+          <label>Destination market</label>
+          <select id="cmp-b-dest" onchange="compareCalc()">
+            <option value="europe" selected>NW Europe (TTF)</option>
+            <option value="japan">Japan / Korea (JKM)</option>
+            <option value="china">China</option>
+            <option value="india">India</option>
+            <option value="asia_crude">Asia-Pacific (crude)</option>
+            <option value="europe_crude">NW Europe (crude)</option>
+            <option value="us_gulf_crude">US Gulf Coast (crude)</option>
+            <option value="med_crude">Mediterranean (crude)</option>
+          </select>
+        </div>
+        <div class="field-row" style="margin-top:10px">
+          <div class="field"><label>Sale price at destination</label><input type="number" id="cmp-b-sell" value="9.80" step="0.05" onchange="compareCalc()"></div>
+          <div class="field"><label>Freight / shipping cost</label><input type="number" id="cmp-b-freight" value="0.95" step="0.05" onchange="compareCalc()"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Other costs (regas/port/fees)</label><input type="number" id="cmp-b-other" value="0.65" step="0.05" onchange="compareCalc()"></div>
+          <div class="field"><label>Voyage days</label><input type="number" id="cmp-b-days" value="9" step="1" onchange="compareCalc()"></div>
+        </div>
+        <div id="cmp-b-results"></div>
+      </div>
+    </div>
+
+    <div id="cmp-verdict"></div>
+    <div class="chart-box"><canvas id="cmpChart" role="img" aria-label="Market comparison chart"></canvas></div>
+  </div>
+
+  <!-- LNG -->
+  <div class="section" id="sec-lng">
+    <div class="calc-layout">
+      <div class="inputs-col">
+        <div class="field-group">
+          <div class="field-group-title">Trade Route</div>
+          <div class="field-row">
+            <div class="field"><label>Origin basin</label>
+              <select id="lng-origin" onchange="lngCalc()">
+                <option value="us_gulf">US Gulf Coast (HH)</option>
+                <option value="qatar">Qatar (Middle East)</option>
+                <option value="australia">Australia (Gorgon/APLNG)</option>
+                <option value="nigeria">Nigeria (NLNG)</option>
+              </select>
+            </div>
+            <div class="field"><label>Destination market</label>
+              <select id="lng-dest" onchange="lngCalc()">
+                <option value="japan">Japan / Korea (JKM)</option>
+                <option value="europe">NW Europe (TTF)</option>
+                <option value="china">China (Shanghai)</option>
+                <option value="india">India (Petronet)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="field-group-title">Price Inputs</div>
+          <div class="field-row triple">
+            <div class="field"><label>Buy price ($/MMBtu)</label><input type="number" id="lng-buy" value="2.80" step="0.05" onchange="lngCalc()"></div>
+            <div class="field"><label>Sale price ($/MMBtu)</label><input type="number" id="lng-sell" value="11.50" step="0.05" onchange="lngCalc()"></div>
+            <div class="field"><label>Cargo size (TBtu)</label><input type="number" id="lng-cargo" value="3.4" step="0.1" onchange="lngCalc()"></div>
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="field-group-title">Full-Chain Cost Stack</div>
+          <div class="field-row">
+            <div class="field"><label>Liquefaction tolling ($/MMBtu)</label><input type="number" id="lng-liq" value="2.50" step="0.05" onchange="lngCalc()"></div>
+            <div class="field"><label>Shipping / voyage ($/MMBtu)</label><input type="number" id="lng-ship" value="1.80" step="0.05" onchange="lngCalc()"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Regas / terminal ($/MMBtu)</label><input type="number" id="lng-regas" value="0.50" step="0.05" onchange="lngCalc()"></div>
+            <div class="field"><label>BOG loss (% of cargo)</label><input type="number" id="lng-bog" value="0.15" step="0.01" onchange="lngCalc()"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Port & canal fees ($/MMBtu)</label><input type="number" id="lng-port" value="0.12" step="0.01" onchange="lngCalc()"></div>
+            <div class="field"><label>Hedge / financing ($/MMBtu)</label><input type="number" id="lng-hedge" value="0.20" step="0.01" onchange="lngCalc()"></div>
+          </div>
+        </div>
+      </div>
+      <div class="results-col" id="lng-results"></div>
+    </div>
+  </div>
+
+  <!-- CRUDE -->
+  <div class="section" id="sec-crude">
+    <div class="calc-layout">
+      <div class="inputs-col">
+        <div class="field-group">
+          <div class="field-group-title">Trade Structure</div>
+          <div class="field-row">
+            <div class="field"><label>Origin grade</label>
+              <select id="cr-grade" onchange="crudeCalc()">
+                <option value="wti">WTI Midland (US)</option>
+                <option value="espo">ESPO (Russia/Pacific)</option>
+                <option value="arab_light">Arab Light (Saudi)</option>
+                <option value="bonny">Bonny Light (Nigeria)</option>
+                <option value="urals">Urals (Russia/Med)</option>
+              </select>
+            </div>
+            <div class="field"><label>Destination refinery</label>
+              <select id="cr-dest" onchange="crudeCalc()">
+                <option value="asia">Asia-Pacific</option>
+                <option value="europe">Northwest Europe</option>
+                <option value="us_gulf">US Gulf Coast</option>
+                <option value="med">Mediterranean</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="field-group-title">Price Inputs</div>
+          <div class="field-row triple">
+            <div class="field"><label>Purchase price ($/bbl)</label><input type="number" id="cr-buy" value="72.00" step="0.25" onchange="crudeCalc()"></div>
+            <div class="field"><label>Benchmark at dest. ($/bbl)</label><input type="number" id="cr-bench" value="80.50" step="0.25" onchange="crudeCalc()"></div>
+            <div class="field"><label>Cargo size (kb)</label><input type="number" id="cr-size" value="2000" step="100" onchange="crudeCalc()"></div>
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="field-group-title">Full Cost Stack</div>
+          <div class="field-row">
+            <div class="field"><label>Freight / voyage ($/bbl)</label><input type="number" id="cr-freight" value="2.20" step="0.05" onchange="crudeCalc()"></div>
+            <div class="field"><label>Grade differential ($/bbl)</label><input type="number" id="cr-diff" value="-0.80" step="0.05" onchange="crudeCalc()"><span class="hint">Negative = discount to benchmark</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Demurrage provision ($/bbl)</label><input type="number" id="cr-dem" value="0.08" step="0.01" onchange="crudeCalc()"></div>
+            <div class="field"><label>Insurance & misc ($/bbl)</label><input type="number" id="cr-ins" value="0.05" step="0.01" onchange="crudeCalc()"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Financing cost ($/bbl)</label><input type="number" id="cr-fin" value="0.12" step="0.01" onchange="crudeCalc()"></div>
+            <div class="field"><label>Quality adjustment ($/bbl)</label><input type="number" id="cr-qual" value="0.30" step="0.05" onchange="crudeCalc()"><span class="hint">API/sulphur yield shift</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="results-col" id="crude-results"></div>
+    </div>
+  </div>
+
+  <!-- GUIDE -->
+  <div class="section" id="sec-guide">
+    <div class="guide-layout">
+      <div class="guide-block">
+        <h4>LNG Full-Chain Logic</h4>
+        <div class="guide-item"><strong>1.</strong> Purchase at wellhead — Henry Hub / netback pricing</div>
+        <div class="guide-item"><strong>2.</strong> Liquefaction tolling — biggest cost (~$2–3/MMBtu)</div>
+        <div class="guide-item"><strong>3.</strong> Shipping: voyage charter + BOG fuel (~0.10–0.15%/day)</div>
+        <div class="guide-item"><strong>4.</strong> Regas terminal fee at destination</div>
+        <div class="guide-item"><strong>5.</strong> Net = destination price − all costs. Arb open if positive</div>
+        <div class="guide-item"><strong>Key drivers:</strong> JKM–HH spread, VLCC/LNG carrier freight, Panama Canal optionality</div>
+      </div>
+      <div class="guide-block">
+        <h4>Crude Arb Logic</h4>
+        <div class="guide-item"><strong>1.</strong> Buy at origin: benchmark ± grade differential</div>
+        <div class="guide-item"><strong>2.</strong> Freight via Worldscale: flat rate × WS points ÷ 100</div>
+        <div class="guide-item"><strong>3.</strong> Quality adj: API gravity + sulphur shift refinery yield value</div>
+        <div class="guide-item"><strong>4.</strong> Sell at destination benchmark (Brent / Dubai / WTI)</div>
+        <div class="guide-item"><strong>5.</strong> Net = dest value − origin cost − freight − adjustments</div>
+        <div class="guide-item"><strong>Key drivers:</strong> Brent–Dubai EFS, VLCC rates, grade differentials</div>
+      </div>
+      <div class="guide-block">
+        <h4>Trafigura Interview Questions</h4>
+        <div class="guide-item">→ Build a full LNG cost stack from wellhead to regas</div>
+        <div class="guide-item">→ WTI VLCC to Asia — walk me through the P&L</div>
+        <div class="guide-item">→ What moves the Atlantic–Pacific LNG arb?</div>
+        <div class="guide-item">→ Panama Canal slot falls through — what do you do?</div>
+        <div class="guide-item">→ Explain BOG and why longer voyages cost more</div>
+        <div class="guide-item">→ When would you hedge before loading? When wouldn't you?</div>
+      </div>
+      <div class="guide-block">
+        <h4>Shell TDP Interview Questions</h4>
+        <div class="guide-item">→ Difference between Brent and WTI — what drives the spread?</div>
+        <div class="guide-item">→ What is the JKM–TTF spread telling you right now?</div>
+        <div class="guide-item">→ How would you hedge a 6-month LNG exposure?</div>
+        <div class="guide-item">→ Walk me through how Dated Brent price is formed</div>
+        <div class="guide-item">→ How does OPEC+ discipline affect your crude trading strategy?</div>
+        <div class="guide-item">→ What is contango and how would you trade it?</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let lngChart=null, crChart=null, cmpChart=null;
+
+function switchTab(t, el) {
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('sec-'+t).classList.add('active');
+  if(t==='compare') compareCalc();
+  if(t==='lng') lngCalc();
+  if(t==='crude') crudeCalc();
+}
+
+function fmt(v,dp=2){return Number(v).toFixed(dp);}
+function fmtM(v){return(v>=0?'+':'')+'\$'+Math.abs(Math.round(v/1e6))+'M';}
+
+function renderResults(containerId, cards, verdict, stack, chartId, chartLabels, chartVals, unit) {
+  document.getElementById(containerId).innerHTML = `
+    <div class="result-grid">${cards}</div>
+    <div class="verdict ${verdict.cls}"><div class="vtitle">${verdict.title}</div><div class="vtext">${verdict.text}</div></div>
+    <div class="cost-stack"><div class="cost-stack-title">${stack.title}</div>${stack.rows}</div>
+    <div class="chart-box"><canvas id="${chartId}" role="img" aria-label="Cost waterfall chart"></canvas></div>
+  `;
+  const ctx=document.getElementById(chartId);
+  if(!ctx) return;
+  const colors=chartVals.map((v,i)=>i===chartVals.length-1?(v>=0?'#22c55e':'#ef4444'):'#0ea5e9');
+  return new Chart(ctx,{
+    type:'bar',
+    data:{labels:chartLabels,datasets:[{data:chartVals,backgroundColor:colors,borderRadius:3}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+fmt(c.raw)+unit}}},
+      scales:{
+        y:{ticks:{callback:v=>'$'+fmt(v),color:'#6b7280',font:{size:10}},grid:{color:'rgba(30,45,69,0.8)'}},
+        x:{ticks:{color:'#6b7280',font:{size:10}},grid:{display:false}}
+      }
+    }
+  });
+}
+
+function lngCalc() {
+  const buy=+document.getElementById('lng-buy').value||0;
+  const sell=+document.getElementById('lng-sell').value||0;
+  const cargo=+document.getElementById('lng-cargo').value||3.4;
+  const liq=+document.getElementById('lng-liq').value||0;
+  const ship=+document.getElementById('lng-ship').value||0;
+  const regas=+document.getElementById('lng-regas').value||0;
+  const bogPct=+document.getElementById('lng-bog').value||0;
+  const port=+document.getElementById('lng-port').value||0;
+  const hedge=+document.getElementById('lng-hedge').value||0;
+
+  const bog=buy*(bogPct/100);
+  const totalCost=buy+liq+ship+regas+bog+port+hedge;
+  const net=sell-totalCost;
+  const cargoUSD=net*cargo*1e9;
+
+  const vc=net>0.5?'open':net>0?'marginal':'closed';
+  const vt=net>0.5?'✓ ARB OPEN — Execute':net>0?'⚠ MARGINAL — Monitor':'✗ ARB CLOSED — Hold';
+  const vtx=net>0.5
+    ?`Net of $${fmt(net)}/MMBtu is above transaction costs. Confirm vessel on subs and hedge the spread before loading.`
+    :net>0?`$${fmt(net)}/MMBtu covers costs but leaves little room. A freight move or delay could close the window.`
+    :`Negative at $${fmt(net)}/MMBtu. Monitor JKM–HH spread. Arb opens when spread widens beyond $${fmt(totalCost)} breakeven.`;
+
+  const origin=document.getElementById('lng-origin').options[document.getElementById('lng-origin').selectedIndex].text;
+  const dest=document.getElementById('lng-dest').options[document.getElementById('lng-dest').selectedIndex].text;
+
+  const cards=`
+    <div class="rcard"><div class="rlabel">Net / MMBtu</div><div class="rval ${net>=0?'pos':'neg'}">${net>=0?'+':''}$${fmt(net)}</div></div>
+    <div class="rcard"><div class="rlabel">Cargo P&L</div><div class="rval ${net>=0?'pos':'neg'}">${fmtM(cargoUSD)}</div><div class="rsub">${fmt(cargo,1)} TBtu cargo</div></div>
+    <div class="rcard"><div class="rlabel">Breakeven sale</div><div class="rval neutral">$${fmt(totalCost)}/MMBtu</div></div>
+    <div class="rcard"><div class="rlabel">Return on buy</div><div class="rval ${net>=0?'pos':'neg'}">${buy>0?fmt(net/buy*100,1):0}%</div></div>`;
+
+  const rows=`
+    <div class="cost-row"><span class="cn">Purchase price</span><span class="cv">$${fmt(buy)}/MMBtu</span></div>
+    <div class="cost-row"><span class="cn">Liquefaction tolling</span><span class="cv">$${fmt(liq)}/MMBtu</span></div>
+    <div class="cost-row"><span class="cn">Shipping (voyage)</span><span class="cv">$${fmt(ship)}/MMBtu</span></div>
+    <div class="cost-row"><span class="cn">BOG loss (${bogPct}%)</span><span class="cv">$${fmt(bog)}/MMBtu</span></div>
+    <div class="cost-row"><span class="cn">Regas / terminal</span><span class="cv">$${fmt(regas)}/MMBtu</span></div>
+    <div class="cost-row"><span class="cn">Port & canal fees</span><span class="cv">$${fmt(port)}/MMBtu</span></div>
+    <div class="cost-row"><span class="cn">Hedge / financing</span><span class="cv">$${fmt(hedge)}/MMBtu</span></div>
+    <div class="cost-row total-row"><span class="cn">Total delivered cost</span><span class="cv">$${fmt(totalCost)}/MMBtu</span></div>
+    <div class="cost-row total-row"><span class="cn">Sale price at destination</span><span class="cv">$${fmt(sell)}/MMBtu</span></div>
+    <div class="cost-row total-row ${net>=0?'pos-row':'neg-row'}"><span class="cn">Net margin</span><span class="cv">${net>=0?'+':''}$${fmt(net)}/MMBtu</span></div>`;
+
+  if(lngChart){lngChart.destroy();lngChart=null;}
+  lngChart=renderResults('lng-results',cards,{cls:vc,title:vt,text:vtx},{title:`${origin} → ${dest}`,rows},'lngChart',
+    ['Buy','Liquef.','Ship','BOG','Regas','Port','Hedge','Net'],
+    [buy,liq,ship,bog,regas,port,hedge,net],'/MMBtu');
+}
+
+function crudeCalc() {
+  const buy=+document.getElementById('cr-buy').value||0;
+  const bench=+document.getElementById('cr-bench').value||0;
+  const size=+document.getElementById('cr-size').value||2000;
+  const freight=+document.getElementById('cr-freight').value||0;
+  const diff=+document.getElementById('cr-diff').value||0;
+  const dem=+document.getElementById('cr-dem').value||0;
+  const ins=+document.getElementById('cr-ins').value||0;
+  const fin=+document.getElementById('cr-fin').value||0;
+  const qual=+document.getElementById('cr-qual').value||0;
+
+  const effectiveCost=buy+freight+dem+ins+fin;
+  const effectiveSell=bench+diff-qual;
+  const net=effectiveSell-effectiveCost;
+  const cargoUSD=net*size*1000;
+
+  const vc=net>1.5?'open':net>0?'marginal':'closed';
+  const vt=net>1.5?'✓ ARB OPEN — Execute':net>0?'⚠ MARGINAL — At risk':'✗ ARB CLOSED — Hold';
+  const vtx=net>1.5
+    ?`$${fmt(net)}/bbl is commercially viable. Cargo P&L: ${fmtM(cargoUSD)} on ${(size/1000).toFixed(0)}mb. Hedge the spread before loading.`
+    :net>0?`$${fmt(net)}/bbl is within demurrage and freight move range. One day's demurrage or 5 WS-point shift could erase the margin.`
+    :`Negative at $${fmt(net)}/bbl. Watch Brent–Dubai EFS and freight softening for arb to reopen.`;
+
+  const grade=document.getElementById('cr-grade').options[document.getElementById('cr-grade').selectedIndex].text;
+  const dest=document.getElementById('cr-dest').options[document.getElementById('cr-dest').selectedIndex].text;
+
+  const cards=`
+    <div class="rcard"><div class="rlabel">Net / bbl</div><div class="rval ${net>=0?'pos':'neg'}">${net>=0?'+':''}$${fmt(net)}</div></div>
+    <div class="rcard"><div class="rlabel">Cargo P&L</div><div class="rval ${net>=0?'pos':'neg'}">${fmtM(cargoUSD)}</div><div class="rsub">${(size/1000).toFixed(0)}mb cargo</div></div>
+    <div class="rcard"><div class="rlabel">Delivered cost</div><div class="rval neutral">$${fmt(effectiveCost)}/bbl</div></div>
+    <div class="rcard"><div class="rlabel">Net sell value</div><div class="rval neutral">$${fmt(effectiveSell)}/bbl</div></div>`;
+
+  const rows=`
+    <div class="cost-row"><span class="cn">Purchase price at origin</span><span class="cv">$${fmt(buy)}/bbl</span></div>
+    <div class="cost-row"><span class="cn">Freight (voyage)</span><span class="cv">$${fmt(freight)}/bbl</span></div>
+    <div class="cost-row"><span class="cn">Demurrage provision</span><span class="cv">$${fmt(dem)}/bbl</span></div>
+    <div class="cost-row"><span class="cn">Insurance & misc</span><span class="cv">$${fmt(ins)}/bbl</span></div>
+    <div class="cost-row"><span class="cn">Financing cost</span><span class="cv">$${fmt(fin)}/bbl</span></div>
+    <div class="cost-row total-row"><span class="cn">Total delivered cost</span><span class="cv">$${fmt(effectiveCost)}/bbl</span></div>
+    <div class="cost-row"><span class="cn">Destination benchmark</span><span class="cv">$${fmt(bench)}/bbl</span></div>
+    <div class="cost-row"><span class="cn">Grade differential</span><span class="cv">${diff>=0?'+':''}$${fmt(diff)}/bbl</span></div>
+    <div class="cost-row"><span class="cn">Quality adjustment</span><span class="cv">-$${fmt(qual)}/bbl</span></div>
+    <div class="cost-row total-row"><span class="cn">Net sell value</span><span class="cv">$${fmt(effectiveSell)}/bbl</span></div>
+    <div class="cost-row total-row ${net>=0?'pos-row':'neg-row'}"><span class="cn">Net margin</span><span class="cv">${net>=0?'+':''}$${fmt(net)}/bbl</span></div>`;
+
+  if(crChart){crChart.destroy();crChart=null;}
+  crChart=renderResults('crude-results',cards,{cls:vc,title:vt,text:vtx},{title:`${grade} → ${dest}`,rows},'crChart',
+    ['Buy','Freight','Demurr.','Insur.','Fin.','Grade diff','Qual adj','Net'],
+    [buy,freight,dem,ins,fin,diff,-qual,net],'/bbl');
+}
+
+// ── MARKET COMPARISON ─────────────────────────────────────────────────────────
+const DEST_LABELS = {
+  japan: 'Japan/Korea (JKM)', europe: 'NW Europe (TTF)', china: 'China', india: 'India',
+  asia_crude: 'Asia-Pacific', europe_crude: 'NW Europe', us_gulf_crude: 'US Gulf Coast', med_crude: 'Mediterranean'
+};
+
+document.getElementById('cmp-type').addEventListener('change', function() {
+  const isLng = this.value === 'lng';
+  document.getElementById('cmp-size-hint').textContent = isLng ? 'TBtu (LNG)' : 'kb (crude)';
+  if (isLng) {
+    document.getElementById('cmp-buy').value = 2.80;
+    document.getElementById('cmp-size').value = 3.4;
+    document.getElementById('cmp-a-dest').value = 'japan';
+    document.getElementById('cmp-a-sell').value = 11.50;
+    document.getElementById('cmp-a-freight').value = 1.80;
+    document.getElementById('cmp-a-other').value = 0.82;
+    document.getElementById('cmp-a-days').value = 20;
+    document.getElementById('cmp-b-dest').value = 'europe';
+    document.getElementById('cmp-b-sell').value = 9.80;
+    document.getElementById('cmp-b-freight').value = 0.95;
+    document.getElementById('cmp-b-other').value = 0.65;
+    document.getElementById('cmp-b-days').value = 9;
+  } else {
+    document.getElementById('cmp-buy').value = 72.00;
+    document.getElementById('cmp-size').value = 2000;
+    document.getElementById('cmp-a-dest').value = 'asia_crude';
+    document.getElementById('cmp-a-sell').value = 84.00;
+    document.getElementById('cmp-a-freight').value = 3.40;
+    document.getElementById('cmp-a-other').value = 0.45;
+    document.getElementById('cmp-a-days').value = 25;
+    document.getElementById('cmp-b-dest').value = 'europe_crude';
+    document.getElementById('cmp-b-sell').value = 80.50;
+    document.getElementById('cmp-b-freight').value = 2.20;
+    document.getElementById('cmp-b-other').value = 0.30;
+    document.getElementById('cmp-b-days').value = 12;
+  }
+  compareCalc();
+});
+
+function calcMarket(buy, sell, freight, other, size, days, isLng) {
+  const totalCost = buy + freight + other;
+  const net = sell - totalCost;
+  const cargoUSD = isLng ? net * size * 1e9 : net * size * 1000;
+  const perDay = days > 0 ? cargoUSD / days : cargoUSD;
+  return { totalCost, net, cargoUSD, perDay };
+}
+
+function renderMarketCol(prefix, label, m, unit, isWinner) {
+  document.getElementById(prefix+'-header').innerHTML = label + (isWinner ? '<span class="winner-badge">Best</span>' : '');
+  document.getElementById(prefix+'-results').innerHTML = `
+    <div class="cmp-result-box">
+      <div class="cmp-label">Net margin</div>
+      <div class="cmp-margin ${m.net>=0?'pos':'neg'}">${m.net>=0?'+':''}$${fmt(m.net)}${unit}</div>
+      <div class="cmp-sub">Cargo P&L: ${fmtM(m.cargoUSD)}</div>
+      <div class="cmp-rate">$${fmt(m.perDay/1e6,2)}M/day in transit · Total cost $${fmt(m.totalCost)}${unit}</div>
+    </div>`;
+}
+
+function compareCalc() {
+  const isLng = document.getElementById('cmp-type').value === 'lng';
+  const unit = isLng ? '/MMBtu' : '/bbl';
+  const buy = +document.getElementById('cmp-buy').value || 0;
+  const size = +document.getElementById('cmp-size').value || (isLng ? 3.4 : 2000);
+
+  const aSell = +document.getElementById('cmp-a-sell').value || 0;
+  const aFreight = +document.getElementById('cmp-a-freight').value || 0;
+  const aOther = +document.getElementById('cmp-a-other').value || 0;
+  const aDays = +document.getElementById('cmp-a-days').value || 1;
+  const aDest = DEST_LABELS[document.getElementById('cmp-a-dest').value] || 'Market A';
+
+  const bSell = +document.getElementById('cmp-b-sell').value || 0;
+  const bFreight = +document.getElementById('cmp-b-freight').value || 0;
+  const bOther = +document.getElementById('cmp-b-other').value || 0;
+  const bDays = +document.getElementById('cmp-b-days').value || 1;
+  const bDest = DEST_LABELS[document.getElementById('cmp-b-dest').value] || 'Market B';
+
+  const mA = calcMarket(buy, aSell, aFreight, aOther, size, aDays, isLng);
+  const mB = calcMarket(buy, bSell, bFreight, bOther, size, bDays, isLng);
+
+  const aWins = mA.net > mB.net;
+  renderMarketCol('cmp-a', aDest, mA, unit, aWins);
+  renderMarketCol('cmp-b', bDest, mB, unit, !aWins);
+
+  const diff = Math.abs(mA.net - mB.net);
+  const diffUSD = Math.abs(mA.cargoUSD - mB.cargoUSD);
+  const winnerName = aWins ? aDest : bDest;
+  const loserName = aWins ? bDest : aDest;
+  const winnerNet = aWins ? mA.net : mB.net;
+  const loserNet = aWins ? mB.net : mA.net;
+
+  let verdictHtml;
+  if (winnerNet < 0 && loserNet < 0) {
+    verdictHtml = `<div class="cmp-verdict tight">
+      <div class="cv-title">⚠ Neither market is profitable</div>
+      <div class="cv-text">Both ${aDest} ($${fmt(mA.net)}${unit}) and ${bDest} ($${fmt(mB.net)}${unit}) show negative margins at current prices. Hold the cargo or wait for the spread to widen before committing.</div>
+    </div>`;
+  } else if (diff < (isLng ? 0.15 : 0.50)) {
+    verdictHtml = `<div class="cmp-verdict tight">
+      <div class="cv-title">⚖ Too close to call — ${winnerName} marginally ahead</div>
+      <div class="cv-text">${winnerName} edges out ${loserName} by only $${fmt(diff)}${unit} (${fmtM(diffUSD)} on this cargo size). This is within normal freight/price volatility — re-check before committing the cargo. Consider optionality: which destination gives you more flexibility if prices move?</div>
+    </div>`;
+  } else {
+    verdictHtml = `<div class="cmp-verdict">
+      <div class="cv-title">✓ ${winnerName} is the better market — by $${fmt(diff)}${unit}</div>
+      <div class="cv-text">Routing this cargo to <strong style="color:#fff">${winnerName}</strong> nets $${fmt(winnerNet)}${unit} versus $${fmt(loserNet)}${unit} at ${loserName} — a difference of <strong style="color:#22c55e">${fmtM(diffUSD)}</strong> on this cargo size.</div>
+    </div>`;
+  }
+  document.getElementById('cmp-verdict').innerHTML = verdictHtml;
+
+  if (cmpChart) { cmpChart.destroy(); cmpChart = null; }
+  const ctx = document.getElementById('cmpChart');
+  if (!ctx) return;
+  cmpChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [aDest, bDest],
+      datasets: [{
+        label: 'Net margin' + unit,
+        data: [mA.net, mB.net],
+        backgroundColor: [aWins ? '#22c55e' : '#0ea5e9', !aWins ? '#22c55e' : '#0ea5e9'],
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '$' + fmt(c.raw) + unit } } },
+      scales: {
+        y: { ticks: { callback: v => '$' + fmt(v), color: '#6b7280', font: { size: 11 } }, grid: { color: 'rgba(30,45,69,0.8)' } },
+        x: { ticks: { color: '#e2e8f0', font: { size: 12, weight: '600' } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+// Auto-calculate on load
+compareCalc();
+lngCalc();
+</script>
+</body>
+</html>
